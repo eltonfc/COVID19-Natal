@@ -32,3 +32,7 @@ Ciências e Tecnologia da Universidade Federal do Rio Grande do norte
 - **Carlos Pellicer** Methodology, Software, Validation, Investigation
 - **Efrain Matamoros** Conceptualization, Supervision
 
+## References
+
+- [SEIRS+](https://github.com/ryansmcgee/seirsplus)
+- [Gillepsie algorithm with networks](https://andrewmellor.co.uk/blog/articles/2014/12/19/gillespie-epidemics/)
