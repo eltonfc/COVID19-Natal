@@ -18,7 +18,8 @@ explicitamente os óbitos.
 
 Esta é uma extensão do algoritmo desenvolvido por C. Pellicer da Escola de
 Ciências e Tecnologia da Universidade Federal do Rio Grande do norte
-(ECT-UFRN).
+(ECT-UFRN). Implementação de grafos de contato baseado no
+[`seirsplus`](https://github.com/ryansmcgee/seirsplus).
 
 ## Autores
 
