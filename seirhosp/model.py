@@ -74,22 +74,22 @@ class SEIRHosp():
         self.popsize = popsize
         # Initialize rates as column arrays with `popsize` lines to ease
         # propensity calculations
-        self.StoE = np.full(shape=(popsize, 1), fill_value=StoE)
-        self.EtoI = np.full(shape=(popsize, 1), fill_value=EtoI)
-        self.ItoR = np.full(shape=(popsize, 1), fill_value=ItoR)
-        self.ItoH = np.full(shape=(popsize, 1),
+        self.StoE = np.full(shape=popsize, fill_value=StoE)
+        self.EtoI = np.full(shape=popsize, fill_value=EtoI)
+        self.ItoR = np.full(shape=popsize, fill_value=ItoR)
+        self.ItoH = np.full(shape=popsize,
                             fill_value=ItoH if ItoH is not None else 0)
-        self.ItoD = np.full(shape=(popsize, 1),
+        self.ItoD = np.full(shape=popsize,
                             fill_value=ItoD if ItoD is not None else 0)
-        self.HtoC = np.full(shape=(popsize, 1),
+        self.HtoC = np.full(shape=popsize,
                             fill_value=HtoC if HtoC is not None else 0)
-        self.HtoR = np.full(shape=(popsize, 1),
+        self.HtoR = np.full(shape=popsize,
                             fill_value=HtoR if HtoR is not None else 0)
-        self.HtoD = np.full(shape=(popsize, 1),
+        self.HtoD = np.full(shape=popsize,
                             fill_value=HtoD if HtoD is not None else 0)
-        self.CtoR = np.full(shape=(popsize, 1),
+        self.CtoR = np.full(shape=popsize,
                             fill_value=CtoR if CtoR is not None else 0)
-        self.CtoD = np.full(shape=(popsize, 1),
+        self.CtoD = np.full(shape=popsize,
                             fill_value=CtoD if CtoD is not None else 0)
 
         # Initialize population
@@ -105,15 +105,15 @@ class SEIRHosp():
         Optionally, the contact network graph is generated here.
         """
         initS = self.popsize - (initE + initI + initH + init_C + initD)
-        self.pop = numpy.array([self.S] * initS + [self.E] * initE
-                               + [self.I] * initI + [self.H] * initH
-                               + [self.C] * initC
-                               + [self.D] * initD).reshape(self.popsize, 1)
+        self.pop = np.array([self.S] * initS + [self.E] * initE
+                            + [self.I] * initI + [self.H] * initH
+                            + [self.C] * initC
+                            + [self.D] * initD)
         # TODO: initialize age groups
         np.random.shuffle(self.pop)
 
     def initialize_time_series(self):
-        """Initialize the tiome series arrays.
+        """Initialize the time series arrays.
 
         The time series is stored as a 2-dimensional `ndarray` where each
         column stores a variable and each row is a timestep.
@@ -133,10 +133,8 @@ class SEIRHosp():
         self.C_col = 5
         self.R_col = 6
         self.D_col = 7
-
         self.tseries = np.full(shape(self.popsize, self.nstates + 1),
                                fill_value=0)
-
         # Initialization values.
         self.t = 0      # Time in days, float
         self.t_idx = 0  # Current timestep index in self.tseries.
@@ -187,8 +185,42 @@ class SEIRHosp():
             is a tuple in the form `(from, to)`, where `from` and `to` are
             state enums.
         """
-        # TODO
-        pass
+        transitions = [(self.S, self.E),
+                       (self.E, self.I),
+                       (self.I, self.R),
+                       (self.I, self.H),
+                       (self.I, self.C),
+                       (self.H, self.C),
+                       (self.H, self.R),
+                       (self.H, self.D),
+                       (self.C, self.R),
+                       (self.C, self.D)]
+
+        # TODO: make work with a network
+        propensities_StoE = (self.StoE * self.tseries[self.t_idx][self.I_col]
+                             * (self.pop == self.S))
+        propensities_EtoI = self.EtoI * (self.pop == self.E)
+        propensities_ItoR = self.ItoR * (self.pop == self.I)
+        propensities_ItoH = self.ItoH * (self.pop == self.I)
+        propensities_ItoD = self.ItoD * (self.pop == self.I)
+        propensities_HtoC = self.HtoC * (self.pop == self.H)
+        propensities_HtoR = self.HtoR * (self.pop == self.H)
+        propensities_HtoD = self.HtoD * (self.pop == self.D)
+        propensities_CtoR = self.CtoR * (self.pop == self.C)
+        propensities_CtoD = self.CtoD * (self.pop == self.C)
+
+        propensities = np.hstack[propensities_StoE,
+                                 propensities_EtoI,
+                                 propensities_ItoR,
+                                 propensities_ItoH,
+                                 propensities_ItoD,
+                                 propensities_HtoC,
+                                 propensities_HtoR,
+                                 propensities_HtoD,
+                                 propensities_CtoR,
+                                 propensities_CtoD]
+
+        return propensities, transitions
 
     def execute_transition(self, transition_node, transition_type):
         """
