@@ -80,7 +80,15 @@ def prepare_from_dt(popsize, ncontacts, StoE,
             HtoC, HtoR, HtoD, CtoR, CtoD, initE, initI, initH, initC, initD,
             ages, comorbidity)
 
-def export_csv(system):
-    np.savetxt("SEIR.dat", system.tseries,
+def export_csv(system, filename):
+    np.savetxt(filename, system.tseries,
                header="t\t\t\t\tS\t\t\t\tE\t\t\t\tI\t\t\t\tH\t\t\t\tC\t\t\t\tR\t\t\t\tD",
                delimiter='\t')
+
+
+if (__name__ == '__main__'):
+    filename = "SEIRS.dat"
+    system = launch.prepare_from_dt(popsize=100000, initI=10, ncontacts=0,
+            StoE=0.15, beta_HtoC=0.2, beta_ItoH=0.2, dtEtoI=4, dtItoH=8,
+            dtItoR=14, dtHtoC=3, dtHtoR=14, dtHtoD=28, dtCtoD=7, dtCtoR=14)
+    export_csv(system, filename)

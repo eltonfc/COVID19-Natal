@@ -263,8 +263,10 @@ class SEIRHosp():
         # Now for the Gillespie Algorithm:
         r1, r2 = np.random.random(2)
 
-        alpha = propensities.sum()      # The propensity of _any_ transition
         cumsum = propensities.cumsum()  # Transition roulette wheel!
+        alpha = cumsum[-1]
+        # The propensity of _any_ transition is the sum of all propensities,
+        # which is the last value of the cummulative sum.
 
         tau = (1.0 / alpha) * np.log(1.0 / r1)    # Time until the next iteration
         self.t += tau
