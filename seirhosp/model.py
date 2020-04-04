@@ -1,3 +1,8 @@
+"""
+Extended SEIR model taking into account hospitaliztion constraints.
+
+Integration is done using the Gillepsie Algorithm.
+"""
 import numpy as np
 import networkx as nx
 
@@ -55,6 +60,7 @@ class SEIRHosp():
                  ItoD=None, HtoC=None, HtoR=None, HtoD=None, CtoR=None,
                  CtoD=None, initE=0, initI=1, initH=0, initC=0, initD=0,
                  ages=None, comorbidity=None):
+        """ Initialize population state, time series and transition rates."""
         # State enumeration
         self.nstates = 7
         self.S = 0
@@ -93,11 +99,16 @@ class SEIRHosp():
         self.initialize_time_series()
 
     def initialize_population(self, initE, initI, initH, init_C, initD):
+        """
+        Populate the population array with initial states.
+
+        Optionally, the contact network graph is generated here.
+        """
         initS = self.popsize - (initE + initI + initH + init_C + initD)
-        self.pop = numpy.array([self.S] * initS + [self.E] * initE +
-                               [self.I] * initI + [self.H] * initH +
-                               [self.C] * initC + [self.D] *
-                               initD).reshape(self.popsize, 1)
+        self.pop = numpy.array([self.S] * initS + [self.E] * initE
+                               + [self.I] * initI + [self.H] * initH
+                               + [self.C] * initC
+                               + [self.D] * initD).reshape(self.popsize, 1)
         # TODO: initialize age groups
         np.random.shuffle(self.pop)
 
@@ -109,7 +120,6 @@ class SEIRHosp():
 
         For readability, there's an enumeration to point to the column indices.
         """
-
         # TODO: implement as Pandas dataframe
         # TODO: store data split by agegroup.
 
@@ -130,6 +140,7 @@ class SEIRHosp():
         # Initialization values.
         self.t = 0      # Time in days, float
         self.t_idx = 0  # Current timestep index in self.tseries.
+        self.t_max = None
         for state in range(self.numstates):
             self.tseries[self.t_idx, state + 1] = np.count_nonzero(
                 np.pop == state)
@@ -146,6 +157,17 @@ class SEIRHosp():
                               mode='constant', constant_values=0)
 
     def update_time_series(self):
+        """
+        Write current state counts to the timeseries. Extend if necessary.
+
+        Instead of `pad`ding every iteration, we periodically `pad` the time
+        series by `popsize` entries by calling `extend_time_series` to save
+        time.
+        """
+        if(self.t_idx >= len(self.tseries) - 1):
+            # The next iteration won't fit in the time series.
+            self.extend_time_series()
+
         for state in range(self.numstates):
             self.tseries[self.t_idx, state + 1] = np.count_nonzero(
                 np.pop == state)
@@ -170,13 +192,17 @@ class SEIRHosp():
 
     def execute_transition(self, transition_node, transition_type):
         """
-        Execute the transition, taking constraints into account
+        Execute the transition, taking constraints into account.
+
+        This is done simply by flipping the state in the population array. If
+        there are constraints, like limited number of hospital beds, we treat
+        them here.
         """
         if(self.pop[transition_node] != transitions[transition_type][0]):
             raise RuntimeError(
-                f"At step {self.t_idx}, node {transition_node} state is" +
-                f" {self.pop[transition_node]} but it is scheduled for" +
-                f" a {transitions[transition_type]} transition.")
+                f"At step {self.t_idx}, node {transition_node} state is"
+                + f" {self.pop[transition_node]} but it is scheduled for"
+                + f" a {transitions[transition_type]} transition.")
 
         # TODO: Implement hospital and ICU beds constraints:
         # if np.count_nonzero(self.pop == self.C) > self.num_icu_beds...
@@ -193,11 +219,6 @@ class SEIRHosp():
             False if all propensities are 0, the system is static.
             True otherwise
         """
-
-        if(self.t_idx >= len(self.tseries) - 1):
-            # The next iteration won't fit in the time series.
-            self.extend_time_series()
-
         propensities, transition_types = self.calc_propensities()
 
         if (propensities.sum() <= 0.0):
@@ -225,3 +246,10 @@ class SEIRHosp():
         self.update_time_series()
 
         return True
+
+    def run(self, T, print_interval=10, verbose=False):
+        """Run or extend the simulation for T days."""
+        self.t_max = T if self.t_max is None else self.t_max + T
+        running = True
+        while running:
+            running = self.run_iteration()
