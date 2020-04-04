@@ -1,7 +1,11 @@
-import model
+from . import model
+import numpy as np
 
-def prepare_from_dt(popsize, ncontacts, StoE, dtEtoI=None, dtItoH=None,
+def prepare_from_dt(popsize, ncontacts, StoE,
+                    beta_ItoH=None, beta_HtoC=None,
+                    dtEtoI=None, dtItoH=None, dtItoD=None,
                     dtItoR=None, dtHtoC=None, dtHtoR=None, dtHtoD=None,
+                    dtCtoD=None, dtCtoR=None,
                     initE=0, initI=1, initH=0, initC=0, initD=0, ages=None,
                     comorbidity=None):
     """
@@ -15,6 +19,10 @@ def prepare_from_dt(popsize, ncontacts, StoE, dtEtoI=None, dtItoH=None,
         Average number of contacts per node in the contact graph.
     StoE : float
         Probability of transmission per unit time.
+    ItoH : float
+        Probability of _ever_ going to the hospital
+    HtoC : float
+        Probability of _ever_ going to intensive care from the hospital
     dtEtoI : float, optional
         Average time for a transition from Exposed to Infectious to occour.
     dtItoH : float, optional
@@ -29,6 +37,10 @@ def prepare_from_dt(popsize, ncontacts, StoE, dtEtoI=None, dtItoH=None,
         Average time for a transition from Hospitalized to Recovered to occour.
     dtHtoD : float, optional
         Average time for a transition from Hospitalized to Deceased to occour.
+    dtCtoR : float, optional
+        Average time for a transition from intensiveCare to Recovered to occour.
+    dtCtoD : float, optional
+        Average time for a transition from intensiveCare to Deceased to occour.
     initE : int, optional
         Initial Exposed population
     initI : int, optional
@@ -52,10 +64,23 @@ def prepare_from_dt(popsize, ncontacts, StoE, dtEtoI=None, dtItoH=None,
     EtoI = 1 - np.exp(-1.0/dtEtoI) if dtEtoI is not None else None
     ItoH = 1 - np.exp(-1.0/dtItoH) if dtItoH is not None else None
     ItoR = 1 - np.exp(-1.0/dtItoR) if dtItoR is not None else None
+    ItoD = 1 - np.exp(-1.0/dtItoD) if dtItoD is not None else None
     HtoC = 1 - np.exp(-1.0/dtHtoC) if dtHtoC is not None else None
     HtoR = 1 - np.exp(-1.0/dtHtoR) if dtHtoR is not None else None
     HtoD = 1 - np.exp(-1.0/dtHtoD) if dtHtoD is not None else None
+    CtoR = 1 - np.exp(-1.0/dtCtoR) if dtHtoR is not None else None
+    CtoD = 1 - np.exp(-1.0/dtCtoD) if dtHtoD is not None else None
+
+    if beta_ItoH is not None:
+        ItoH *= beta_ItoH
+    if beta_HtoC is not None:
+        HtoC *= beta_HtoC
 
     return model.SEIRHosp(popsize, ncontacts, StoE, EtoI, ItoR, ItoH, ItoD,
             HtoC, HtoR, HtoD, CtoR, CtoD, initE, initI, initH, initC, initD,
             ages, comorbidity)
+
+def export_csv(system):
+    np.savetxt("SEIR.dat", system.tseries,
+               header="t\t\t\t\tS\t\t\t\tE\t\t\t\tI\t\t\t\tH\t\t\t\tC\t\t\t\tR\t\t\t\tD",
+               delimiter='\t')

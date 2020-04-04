@@ -56,9 +56,11 @@ class SEIRHosp():
         Comorbidity rate per age group.. Must be in the same format as `ages`.
     """
 
-    def __init__(self, popsize, ncontacts, StoE, EtoI, ItoR, ItoH=None,
-                 ItoD=None, HtoC=None, HtoR=None, HtoD=None, CtoR=None,
-                 CtoD=None, initE=0, initI=1, initH=0, initC=0, initD=0,
+    def __init__(self, popsize, ncontacts, StoE, EtoI,
+                 ItoR, ItoH=None, ItoD=None,
+                 HtoC=None, HtoR=None, HtoD=None,
+                 CtoR=None, CtoD=None,
+                 initE=0, initI=1, initH=0, initC=0, initD=0,
                  ages=None, comorbidity=None):
         """ Initialize population state, time series and transition rates."""
         # State enumeration
@@ -93,18 +95,18 @@ class SEIRHosp():
                             fill_value=CtoD if CtoD is not None else 0)
 
         # Initialize population
-        self.initialize_population(initS, initE, initI, initH, init_C, initD)
+        self.initialize_population(initE, initI, initH, initC, initD)
         # TODO: initialize contact graphs
 
         self.initialize_time_series()
 
-    def initialize_population(self, initE, initI, initH, init_C, initD):
+    def initialize_population(self, initE, initI, initH, initC, initD):
         """
         Populate the population array with initial states.
 
         Optionally, the contact network graph is generated here.
         """
-        initS = self.popsize - (initE + initI + initH + init_C + initD)
+        initS = self.popsize - (initE + initI + initH + initC + initD)
         self.pop = np.array([self.S] * initS + [self.E] * initE
                             + [self.I] * initI + [self.H] * initH
                             + [self.C] * initC
@@ -133,15 +135,13 @@ class SEIRHosp():
         self.C_col = 5
         self.R_col = 6
         self.D_col = 7
-        self.tseries = np.full(shape(self.popsize, self.nstates + 1),
-                               fill_value=0)
+        self.tseries = np.full(shape=(self.popsize, self.nstates + 1),
+                               fill_value=0.0)
         # Initialization values.
-        self.t = 0      # Time in days, float
+        self.t = 0.0      # Time in days, float
         self.t_idx = 0  # Current timestep index in self.tseries.
-        self.t_max = None
-        for state in range(self.numstates):
-            self.tseries[self.t_idx, state + 1] = np.count_nonzero(
-                np.pop == state)
+        self.t_max = 0.0
+        self.update_time_series()
 
     def extend_time_series(self):
         """
@@ -150,7 +150,7 @@ class SEIRHosp():
         We do this periodically to avoid `insert`ing every iteration, which can
         be costly.
         """
-        self.tseries = np.pad(array=tseries,
+        self.tseries = np.pad(array=self.tseries,
                               pad_width=((0, self.popsize), (0, 0)),
                               mode='constant', constant_values=0)
 
@@ -166,9 +166,10 @@ class SEIRHosp():
             # The next iteration won't fit in the time series.
             self.extend_time_series()
 
-        for state in range(self.numstates):
+        self.tseries[self.t_idx, 0] = self.t
+        for state in range(self.nstates):
             self.tseries[self.t_idx, state + 1] = np.count_nonzero(
-                np.pop == state)
+                self.pop == state)
 
     def calc_propensities(self):
         """
@@ -198,18 +199,18 @@ class SEIRHosp():
 
         # TODO: make work with a network
         propensities_StoE = (self.StoE * self.tseries[self.t_idx][self.I_col]
-                             * (self.pop == self.S))
+                             * (self.pop == self.S)) / self.popsize
         propensities_EtoI = self.EtoI * (self.pop == self.E)
         propensities_ItoR = self.ItoR * (self.pop == self.I)
         propensities_ItoH = self.ItoH * (self.pop == self.I)
         propensities_ItoD = self.ItoD * (self.pop == self.I)
         propensities_HtoC = self.HtoC * (self.pop == self.H)
         propensities_HtoR = self.HtoR * (self.pop == self.H)
-        propensities_HtoD = self.HtoD * (self.pop == self.D)
+        propensities_HtoD = self.HtoD * (self.pop == self.H)
         propensities_CtoR = self.CtoR * (self.pop == self.C)
         propensities_CtoD = self.CtoD * (self.pop == self.C)
 
-        propensities = np.hstack[propensities_StoE,
+        propensities = np.hstack([propensities_StoE,
                                  propensities_EtoI,
                                  propensities_ItoR,
                                  propensities_ItoH,
@@ -218,7 +219,7 @@ class SEIRHosp():
                                  propensities_HtoR,
                                  propensities_HtoD,
                                  propensities_CtoR,
-                                 propensities_CtoD]
+                                 propensities_CtoD])
 
         return propensities, transitions
 
@@ -230,15 +231,15 @@ class SEIRHosp():
         there are constraints, like limited number of hospital beds, we treat
         them here.
         """
-        if(self.pop[transition_node] != transitions[transition_type][0]):
+        if(self.pop[transition_node] != transition_type[0]):
             raise RuntimeError(
                 f"At step {self.t_idx}, node {transition_node} state is"
                 + f" {self.pop[transition_node]} but it is scheduled for"
-                + f" a {transitions[transition_type]} transition.")
+                + f" a {transition_type} transition.")
 
         # TODO: Implement hospital and ICU beds constraints:
         # if np.count_nonzero(self.pop == self.C) > self.num_icu_beds...
-        self.pop[transition_node] = transitions[transition_type][1]
+        self.pop[transition_node] = transition_type[1]
 
     def run_iteration(self):
         """
@@ -256,32 +257,40 @@ class SEIRHosp():
         if (propensities.sum() <= 0.0):
             # Terminate because no more transitions are possible.
             self.tseries = self.tseries[:self.t_idx + 1]
+            print(f"Null propensities. Terminating. {propensities}")
             return False
 
         # Now for the Gillespie Algorithm:
-        r1, r2 = numpy.random.random(2)
+        r1, r2 = np.random.random(2)
 
         alpha = propensities.sum()      # The propensity of _any_ transition
         cumsum = propensities.cumsum()  # Transition roulette wheel!
 
-        tau = (1 / alpha) * np.log(1.0 / r1)    # Time until the next iteration
+        tau = (1.0 / alpha) * np.log(1.0 / r1)    # Time until the next iteration
         self.t += tau
-        selt.t_idx += 1
+        self.t_idx += 1
 
         # Spin the roulette!
         transition_idx = np.searchsorted(cumsum, r2 * alpha)
-        transition_node = transition_idx % self.pop
-        transition_type = transition_types[int(transition_idx / self.pop)]
+        transition_node = transition_idx % self.popsize
+        transition_type = transition_types[int(transition_idx / self.popsize)]
 
-        self.execute_transition(transition_node, transition_type)
+        try:
+            self.execute_transition(transition_node, transition_type)
+        except RuntimeError:
+            print(r2 * alpha, cumsum[transition_idx-3:transition_idx+2])
+            raise
+
 
         self.update_time_series()
 
         return True
 
-    def run(self, T, print_interval=10, verbose=False):
+    def run(self, T, print_interval=1, verbose=False):
         """Run or extend the simulation for T days."""
         self.t_max = T if self.t_max is None else self.t_max + T
         running = True
-        while running:
+        while running and self.t < self.t_max:
             running = self.run_iteration()
+            if (self.t_idx % print_interval == 0):
+                print(f"{self.t_idx}: {self.tseries[self.t_idx]}")
