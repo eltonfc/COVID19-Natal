@@ -73,9 +73,28 @@ class SEIRHosp():
         self.R = 5
         self.D = 6
 
+
         self.popsize = popsize
-        # Initialize rates as column arrays with `popsize` lines to ease
+
+        # Flag which state's population (or transition probability changed) in
+        # each step to avoid calculating costly propensities
+        self.changed_states = [ True for k in range(self.nstates)]
+
+        self.transitions = [(self.S, self.E),
+                       (self.E, self.I),
+                       (self.I, self.R),
+                       (self.I, self.H),
+                       (self.I, self.C),
+                       (self.H, self.C),
+                       (self.H, self.R),
+                       (self.H, self.D),
+                       (self.C, self.R),
+                       (self.C, self.D)]
+
+        # Initialize rates as arrays with `popsize` elements to ease
         # propensity calculations
+        # TODO: implement as 2d array, the same as propensities.
+        # TODO: Transition enum
         self.StoE = np.full(shape=popsize, fill_value=StoE)
         self.EtoI = np.full(shape=popsize, fill_value=EtoI)
         self.ItoR = np.full(shape=popsize, fill_value=ItoR)
@@ -94,6 +113,9 @@ class SEIRHosp():
         self.CtoD = np.full(shape=popsize,
                             fill_value=CtoD if CtoD is not None else 0)
 
+        # Propensities are stored as an array with one line per transition with
+        # `self.popsize` elements each.
+        self.propensities = np.zeros((len(self.transitions), self.popsize))
         # Initialize population
         self.initialize_population(initE, initI, initH, initC, initD)
         # TODO: initialize contact graphs
@@ -176,52 +198,45 @@ class SEIRHosp():
         Calculate the propensities for each transition for each individual.
 
         This is where we implement our differential equations.
-
-        Returns
-        -------
-        propensities: array_like
-            1-D Flattened propensities array.
-        transitions: list of tuples
-            Transitions in the order as they appear in `propensities`. Each one
-            is a tuple in the form `(from, to)`, where `from` and `to` are
-            state enums.
         """
-        transitions = [(self.S, self.E),
-                       (self.E, self.I),
-                       (self.I, self.R),
-                       (self.I, self.H),
-                       (self.I, self.C),
-                       (self.H, self.C),
-                       (self.H, self.R),
-                       (self.H, self.D),
-                       (self.C, self.R),
-                       (self.C, self.D)]
 
         # TODO: make work with a network
-        propensities_StoE = (self.StoE * self.tseries[self.t_idx][self.I_col]
-                             * (self.pop == self.S)) / self.popsize
-        propensities_EtoI = self.EtoI * (self.pop == self.E)
-        propensities_ItoR = self.ItoR * (self.pop == self.I)
-        propensities_ItoH = self.ItoH * (self.pop == self.I)
-        propensities_ItoD = self.ItoD * (self.pop == self.I)
-        propensities_HtoC = self.HtoC * (self.pop == self.H)
-        propensities_HtoR = self.HtoR * (self.pop == self.H)
-        propensities_HtoD = self.HtoD * (self.pop == self.H)
-        propensities_CtoR = self.CtoR * (self.pop == self.C)
-        propensities_CtoD = self.CtoD * (self.pop == self.C)
+        if self.changed_states[self.S] or self.changed_states[self.E]:
+            # propensities_StoE
+            self.propensities[0] = (self.StoE
+                    * (self.tseries[self.t_idx][self.I_col] / self.popsize)
+                    * (self.pop == self.S))
+        if self.changed_states[self.E] or self.changed_states[self.I]:
+            # propensities_EtoI
+            self.propensities[1] = self.EtoI * (self.pop == self.E)
+        if self.changed_states[self.I] or self.changed_states[self.R]:
+            # propensities_ItoR
+            self.propensities[2] = self.ItoR * (self.pop == self.I)
+        if self.changed_states[self.I] or self.changed_states[self.H]:
+            # propensities_ItoH
+            self.propensities[3] = self.ItoH * (self.pop == self.I)
+        if self.changed_states[self.I] or self.changed_states[self.D]:
+            # propensities_ItoD
+            self.propensities[4] = self.ItoD * (self.pop == self.I)
+        if self.changed_states[self.H] or self.changed_states[self.C]:
+            # propensities_HtoC
+            self.propensities[5] = self.HtoC * (self.pop == self.H)
+        if self.changed_states[self.H] or self.changed_states[self.R]:
+            # propensities_HtoR
+            self.propensities[6] = self.HtoR * (self.pop == self.H)
+        if self.changed_states[self.H] or self.changed_states[self.D]:
+            # propensities_HtoD
+            self.propensities[7] = self.HtoD * (self.pop == self.H)
+        if self.changed_states[self.C] or self.changed_states[self.R]:
+            # propensities_CtoR
+            self.propensities[8] = self.CtoR * (self.pop == self.C)
+        if self.changed_states[self.C] or self.changed_states[self.D]:
+            # propensities_CtoD
+            self.propensities[9] = self.CtoD * (self.pop == self.C)
 
-        propensities = np.hstack([propensities_StoE,
-                                 propensities_EtoI,
-                                 propensities_ItoR,
-                                 propensities_ItoH,
-                                 propensities_ItoD,
-                                 propensities_HtoC,
-                                 propensities_HtoR,
-                                 propensities_HtoD,
-                                 propensities_CtoR,
-                                 propensities_CtoD])
-
-        return propensities, transitions
+        # Flag which state's population (or transition probability changed) in
+        # each step to avoid recalculating costly propensities
+        self.changed_states = [ False for k in range(self.nstates)]
 
     def execute_transition(self, transition_node, transition_type):
         """
@@ -240,6 +255,8 @@ class SEIRHosp():
         # TODO: Implement hospital and ICU beds constraints:
         # if np.count_nonzero(self.pop == self.C) > self.num_icu_beds...
         self.pop[transition_node] = transition_type[1]
+        self.changed_states[transition_type[0]] = True
+        self.changed_states[transition_type[1]] = True
 
     def run_iteration(self):
         """
@@ -252,18 +269,18 @@ class SEIRHosp():
             False if all propensities are 0, the system is static.
             True otherwise
         """
-        propensities, transition_types = self.calc_propensities()
+        self.calc_propensities()
 
-        if (propensities.sum() <= 0.0):
+        if (self.propensities.sum() <= 0.0):
             # Terminate because no more transitions are possible.
             self.tseries = self.tseries[:self.t_idx + 1]
-            print(f"Null propensities. Terminating. {propensities}")
+            print(f"Null propensities. Terminating.")
             return False
 
         # Now for the Gillespie Algorithm:
         r1, r2 = np.random.random(2)
 
-        cumsum = propensities.cumsum()  # Transition roulette wheel!
+        cumsum = self.propensities.cumsum()  # Transition roulette wheel!
         alpha = cumsum[-1]
         # The propensity of _any_ transition is the sum of all propensities,
         # which is the last value of the cummulative sum.
@@ -275,14 +292,9 @@ class SEIRHosp():
         # Spin the roulette!
         transition_idx = np.searchsorted(cumsum, r2 * alpha)
         transition_node = transition_idx % self.popsize
-        transition_type = transition_types[int(transition_idx / self.popsize)]
+        transition_type = self.transitions[int(transition_idx / self.popsize)]
 
-        try:
-            self.execute_transition(transition_node, transition_type)
-        except RuntimeError:
-            print(r2 * alpha, cumsum[transition_idx-3:transition_idx+2])
-            raise
-
+        self.execute_transition(transition_node, transition_type)
 
         self.update_time_series()
 
