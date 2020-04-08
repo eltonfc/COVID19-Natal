@@ -5,6 +5,7 @@ Integration is done using the Gillepsie Algorithm.
 """
 import numpy as np
 import networkx as nx
+from scipy import sparse
 
 
 class SEIRHosp():
@@ -15,8 +16,6 @@ class SEIRHosp():
     ----------
     popsize : int
         Population size
-    ncontacts : int
-        Average number of contacts per node in the contact graph.
     StoE : float
         Probability of transmission per unit time.
     EtoI : float
@@ -47,32 +46,39 @@ class SEIRHosp():
         Initial population in intensiveCare
     initR : int, optional
         Initial Recovered population
+    contacts : ndarray or networkx graph, optional
+        Social contact graph/matrix. Must be a networkx.Graph object with
+        `popsize` nodes or 2D matrix with `popsize` rows/columns.
+    p_global : float, optional
+        Probability that an individual makes contact with someoe outside their
+        contact network. default = 0
     ages : dict, optional
         Prevalence of each age group in the population.
         Format: { '0-5': x, '5-10': y ...} if x, y, ... are floats, they will
         be considered probabilities for each age bracket. If x, y, ... are
-        ints, they are considered absolute values.
+        ints, they are considered absolute values and must sum to `popsize`.
     comorbidity : dicts, optional
         Comorbidity rate per age group.. Must be in the same format as `ages`.
     """
 
-    def __init__(self, popsize, ncontacts, StoE, EtoI,
+    def __init__(self, popsize, StoE, EtoI,
                  ItoR, ItoH=None, ItoD=None,
                  HtoC=None, HtoR=None, HtoD=None,
                  CtoR=None, CtoD=None,
                  initE=0, initI=1, initH=0, initC=0, initD=0,
-                 ages=None, comorbidity=None):
+                 contacts=None, p_global=0, ages=None, comorbidity=None):
         """ Initialize population state, time series and transition rates."""
-        # State enumeration
+        # State enumeration, fixed here to avoid hashing later on.
+        # This enumeration doubles as time series column enumeration.
         self.nstates = 7
-        self.S = 0
-        self.E = 1
-        self.I = 2
-        self.H = 3
-        self.C = 4
-        self.R = 5
-        self.D = 6
-
+        self.t_enum = 0
+        self.S = 1
+        self.E = 2
+        self.I = 3
+        self.H = 4
+        self.C = 5
+        self.R = 6
+        self.D = 7
 
         self.popsize = popsize
 
@@ -81,15 +87,15 @@ class SEIRHosp():
         self.changed_states = [ True for k in range(self.nstates)]
 
         self.transitions = [(self.S, self.E),
-                       (self.E, self.I),
-                       (self.I, self.R),
-                       (self.I, self.H),
-                       (self.I, self.C),
-                       (self.H, self.C),
-                       (self.H, self.R),
-                       (self.H, self.D),
-                       (self.C, self.R),
-                       (self.C, self.D)]
+                            (self.E, self.I),
+                            (self.I, self.R),
+                            (self.I, self.H),
+                            (self.I, self.C),
+                            (self.H, self.C),
+                            (self.H, self.R),
+                            (self.H, self.D),
+                            (self.C, self.R),
+                            (self.C, self.D)]
 
         # Initialize rates as arrays with `popsize` elements to ease
         # propensity calculations
@@ -118,7 +124,11 @@ class SEIRHosp():
         self.propensities = np.zeros((len(self.transitions), self.popsize))
         # Initialize population
         self.initialize_population(initE, initI, initH, initC, initD)
-        # TODO: initialize contact graphs
+
+        if contacts is not None:
+            self.update_adjacency_matrix(contacts)
+        else:
+            self.adjacency = None
 
         self.initialize_time_series()
 
@@ -126,7 +136,7 @@ class SEIRHosp():
         """
         Populate the population array with initial states.
 
-        Optionally, the contact network graph is generated here.
+        zOptionally, the contact network graph is generated here.
         """
         initS = self.popsize - (initE + initI + initH + initC + initD)
         self.pop = np.array([self.S] * initS + [self.E] * initE
@@ -136,6 +146,36 @@ class SEIRHosp():
         # TODO: initialize age groups
         np.random.shuffle(self.pop)
 
+    def update_contact_matrix(self, contacts):
+        """
+        Expose the ajacency matrix from the contact graph as a sparse matrix.
+
+        Parameters
+        ----------
+        contacts : ndarray or networkx.Graph
+            Contact graph as a `popsize` x `popsize` array or as a
+            `networkx.Graph` object with `popsize`nodes.
+        """
+        self.contacts = contacts
+        self.p_global = np.full(shape=popsize,
+                            fill_value= p_global if CtoD is not None else 0)
+        if type(contacts) == np.ndarray:
+            if contacts.shape != (self.popsize, self.popsize):
+                raise(RuntimeError, "Parameter contacts must have shape "
+                                    + f"({self.popsize},{self.popsize}) "
+                                    + "if it\'s entered as a numpy array. "
+                                    + f"Got {contacts.shape} instead.")
+            self.adjacency = sparse.csr_matrix(contacts)
+        elif type(contacts) == nx.classes.graph.Graph:
+            if contacts.number_of_nodes() != self.popsize:
+                raise(RuntimeError, f"Parameter contacts must have {popsize} "
+                                    + f"nodes, got {contacts.number_of_nodes()}"
+                                    + "instead.")
+            self.adjacency = nx.adj_matrix(contacts)
+            # Number of contacts per individual. Much quicker to do this way,
+            # as serisplus does, than contacts.degree()
+            self.num_contacts = np.asarray(A.sum(axis=0))[0]
+
     def initialize_time_series(self):
         """Initialize the time series arrays.
 
@@ -144,24 +184,12 @@ class SEIRHosp():
 
         For readability, there's an enumeration to point to the column indices.
         """
-        # TODO: implement as Pandas dataframe
-        # TODO: store data split by agegroup.
-
-        # Column enumeration
-        # NOTE: must match the State enumeration in `__init__`
-        self.t_col = 0
-        self.S_col = 1
-        self.E_col = 2
-        self.I_col = 3
-        self.H_col = 4
-        self.C_col = 5
-        self.R_col = 6
-        self.D_col = 7
         self.tseries = np.full(shape=(self.popsize, self.nstates + 1),
                                fill_value=0.0)
+        # TODO: store data split by agegroup.
         # Initialization values.
-        self.t = 0.0      # Time in days, float
-        self.t_idx = 0  # Current timestep index in self.tseries.
+        self.t = 0.0        # Time in days, float
+        self.t_idx = 0      # Current timestep index in self.tseries.
         self.t_max = 0.0
         self.update_time_series()
 
@@ -200,12 +228,26 @@ class SEIRHosp():
         This is where we implement our differential equations.
         """
 
-        # TODO: make work with a network
         if self.changed_states[self.S] or self.changed_states[self.E]:
-            # propensities_StoE
-            self.propensities[0] = (self.StoE
-                    * (self.tseries[self.t_idx][self.I_col] / self.popsize)
-                    * (self.pop == self.S))
+            if self.adjacency is None:
+                # Only global transmission
+                    # propensities_StoE
+                    self.propensities[0] = (self.StoE
+                            * (self.tseries[self.t_idx][self.I] / self.popsize)
+                            * (self.pop == self.S))
+            else:
+                # Taking the contact network into account
+                    StoE_contacts = np.asarray(sparse.csr_matrix.dot(
+                        self.adjacency, self.pop == self.I))
+                    self.propensities[0] = (self.p_global * self.StoE
+                            * (self.tseries[self.t_idx][self.I] / self.popsize)
+                            + (1 - self.p_global)
+                            * np.divide((self.StoE * StoE_contacts),
+                                         self.num_contacts,
+                                         out=np.zeros_like(self.num_contacts),
+                                         where=self.num_contacts!=0)
+                            * (self.pop == self.S))
+
         if self.changed_states[self.E] or self.changed_states[self.I]:
             # propensities_EtoI
             self.propensities[1] = self.EtoI * (self.pop == self.E)

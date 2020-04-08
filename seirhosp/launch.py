@@ -1,12 +1,14 @@
 from . import model
 import numpy as np
+import networkx as nx
 
-def prepare_from_dt(popsize, ncontacts, StoE,
+def prepare_from_dt(popsize, StoE,
                     beta_ItoH=None, beta_HtoC=None,
                     dtEtoI=None, dtItoH=None, dtItoD=None,
                     dtItoR=None, dtHtoC=None, dtHtoR=None, dtHtoD=None,
                     dtCtoD=None, dtCtoR=None,
-                    initE=0, initI=1, initH=0, initC=0, initD=0, ages=None,
+                    initE=0, initI=1, initH=0, initC=0, initD=0,
+                    ncontacts=None, p_global=0, ages=None,
                     comorbidity=None):
     """
     Prepare a `SEIRHosp` object based on state durations.
@@ -15,8 +17,6 @@ def prepare_from_dt(popsize, ncontacts, StoE,
     ----------
     popsize : int
         Population size
-    ncontacts : int
-        Average number of contacts per node in the contact graph.
     StoE : float
         Probability of transmission per unit time.
     ItoH : float
@@ -51,6 +51,11 @@ def prepare_from_dt(popsize, ncontacts, StoE,
         Initial population in intensiveCare
     initR : int, optional
         Initial Recovered population
+    ncontacts : int, optional
+        Average number of contacts per node in the contact graph.
+    p_global : float, optional
+        Probability that an individual makes contact with someoe outside their
+        contact network. default = 0
     ages : dict, optional
         Prevalence of each age group in the population.
         Format: { '0-5': x, '5-10': y ...} if x, y, ... are floats, they will
@@ -76,9 +81,36 @@ def prepare_from_dt(popsize, ncontacts, StoE,
     if beta_HtoC is not None:
         HtoC *= beta_HtoC
 
-    return model.SEIRHosp(popsize, ncontacts, StoE, EtoI, ItoR, ItoH, ItoD,
+    if ncontacts is not None:
+        contacts = custom_exponenital_graph(popsize, ncontacts)
+    else:
+        contacts = None
+    return model.SEIRHosp(popsize, StoE, EtoI, ItoR, ItoH, ItoD,
             HtoC, HtoR, HtoD, CtoR, CtoD, initE, initI, initH, initC, initD,
-            ages, comorbidity)
+            contacts, p_global, ages, comorbidity)
+
+def custom_exponenital_graph(popsize, ncontacts):
+    """
+    Obtain a preferential attachment graph without minimum contacts.
+
+    Algorithm by Ryan McGee in package `seirsplus`.
+    """
+    graph = nx.barabasi_albert_graph(popsize, ncontacts, scale=100)
+
+    #Randomly delete nodes
+    for node in graph:
+        neighbors = list(graph[node].keys())
+        num_to_keep = int(min(np.random.exponential(scale=scale, size=1),
+                              len(neighbors)))
+        neighbors_to_keep = np.random.choice(neighbors,
+                                             size=num_to_keep,
+                                             replace=False)
+        for neighbor in neighbors:
+            if neighbor not in neighbors_to_keep:
+                graph.remove_edge(node, neighbor)
+
+        return graph
+
 
 def export_csv(system, filename):
     np.savetxt(filename, system.tseries,
