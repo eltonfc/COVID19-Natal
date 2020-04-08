@@ -89,15 +89,17 @@ def prepare_from_dt(popsize, StoE,
             HtoC, HtoR, HtoD, CtoR, CtoD, initE, initI, initH, initC, initD,
             contacts, p_global, ages, comorbidity)
 
-def custom_exponenital_graph(popsize, ncontacts):
+def custom_exponenital_graph(popsize, ncontacts, scale=100):
     """
     Obtain a preferential attachment graph without minimum contacts.
 
     Algorithm by Ryan McGee in package `seirsplus`.
     """
-    graph = nx.barabasi_albert_graph(popsize, ncontacts, scale=100)
+    print("Generating contact graph...")
+    graph = nx.barabasi_albert_graph(popsize, ncontacts)
 
     #Randomly delete nodes
+    print("Excluding edges from graph...")
     for node in graph:
         neighbors = list(graph[node].keys())
         num_to_keep = int(min(np.random.exponential(scale=scale, size=1),

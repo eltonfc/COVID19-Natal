@@ -84,7 +84,7 @@ class SEIRHosp():
 
         # Flag which state's population (or transition probability changed) in
         # each step to avoid calculating costly propensities
-        self.changed_states = [ True for k in range(self.nstates)]
+        self.changed_states = [ True for k in range(self.nstates + 1)]
 
         self.transitions = [(self.S, self.E),
                             (self.E, self.I),
@@ -127,6 +127,7 @@ class SEIRHosp():
 
         if contacts is not None:
             self.update_adjacency_matrix(contacts)
+            self.p_global = np.full(shape=self.popsize, fill_value=p_global)
         else:
             self.adjacency = None
 
@@ -146,7 +147,7 @@ class SEIRHosp():
         # TODO: initialize age groups
         np.random.shuffle(self.pop)
 
-    def update_contact_matrix(self, contacts):
+    def update_adjacency_matrix(self, contacts):
         """
         Expose the ajacency matrix from the contact graph as a sparse matrix.
 
@@ -157,8 +158,6 @@ class SEIRHosp():
             `networkx.Graph` object with `popsize`nodes.
         """
         self.contacts = contacts
-        self.p_global = np.full(shape=popsize,
-                            fill_value= p_global if CtoD is not None else 0)
         if type(contacts) == np.ndarray:
             if contacts.shape != (self.popsize, self.popsize):
                 raise(RuntimeError, "Parameter contacts must have shape "
@@ -174,7 +173,7 @@ class SEIRHosp():
             self.adjacency = nx.adj_matrix(contacts)
             # Number of contacts per individual. Much quicker to do this way,
             # as serisplus does, than contacts.degree()
-            self.num_contacts = np.asarray(A.sum(axis=0))[0]
+            self.num_contacts = np.asarray(self.adjacency.sum(axis=0))[0]
 
     def initialize_time_series(self):
         """Initialize the time series arrays.
@@ -238,13 +237,14 @@ class SEIRHosp():
             else:
                 # Taking the contact network into account
                     StoE_contacts = np.asarray(sparse.csr_matrix.dot(
-                        self.adjacency, self.pop == self.I))
+                        self.adjacency, self.pop == self.I), dtype='float64')
                     self.propensities[0] = (self.p_global * self.StoE
                             * (self.tseries[self.t_idx][self.I] / self.popsize)
                             + (1 - self.p_global)
                             * np.divide((self.StoE * StoE_contacts),
                                          self.num_contacts,
-                                         out=np.zeros_like(self.num_contacts),
+                                         out=np.zeros_like(self.num_contacts,
+                                                           dtype='float64'),
                                          where=self.num_contacts!=0)
                             * (self.pop == self.S))
 
@@ -255,30 +255,23 @@ class SEIRHosp():
             # propensities_ItoR
             self.propensities[2] = self.ItoR * (self.pop == self.I)
         if self.changed_states[self.I] or self.changed_states[self.H]:
-            # propensities_ItoH
             self.propensities[3] = self.ItoH * (self.pop == self.I)
         if self.changed_states[self.I] or self.changed_states[self.D]:
-            # propensities_ItoD
             self.propensities[4] = self.ItoD * (self.pop == self.I)
         if self.changed_states[self.H] or self.changed_states[self.C]:
-            # propensities_HtoC
             self.propensities[5] = self.HtoC * (self.pop == self.H)
         if self.changed_states[self.H] or self.changed_states[self.R]:
-            # propensities_HtoR
             self.propensities[6] = self.HtoR * (self.pop == self.H)
         if self.changed_states[self.H] or self.changed_states[self.D]:
-            # propensities_HtoD
             self.propensities[7] = self.HtoD * (self.pop == self.H)
         if self.changed_states[self.C] or self.changed_states[self.R]:
-            # propensities_CtoR
             self.propensities[8] = self.CtoR * (self.pop == self.C)
         if self.changed_states[self.C] or self.changed_states[self.D]:
-            # propensities_CtoD
             self.propensities[9] = self.CtoD * (self.pop == self.C)
 
         # Flag which state's population (or transition probability changed) in
         # each step to avoid recalculating costly propensities
-        self.changed_states = [ False for k in range(self.nstates)]
+        self.changed_states = [ False for k in range(self.nstates + 1)]
 
     def execute_transition(self, transition_node, transition_type):
         """
@@ -302,7 +295,7 @@ class SEIRHosp():
 
     def run_iteration(self):
         """
-        Execute the next reaction.
+        Determine and execute the next reaction.
 
         This method executes one reaction in the Gillespie Algorithm.;
 
@@ -332,9 +325,9 @@ class SEIRHosp():
         self.t_idx += 1
 
         # Spin the roulette!
-        transition_idx = np.searchsorted(cumsum, r2 * alpha)
-        transition_node = transition_idx % self.popsize
-        transition_type = self.transitions[int(transition_idx / self.popsize)]
+        selected_idx = np.searchsorted(cumsum, r2 * alpha)
+        transition_node = selected_idx % self.popsize
+        transition_type = self.transitions[int(selected_idx / self.popsize)]
 
         self.execute_transition(transition_node, transition_type)
 
