@@ -141,6 +141,12 @@ class SEIRHosp():
             self.adjacency = None
 
         self.initialize_time_series()
+        if algorithm == 'gillespie':
+            self.run_iteration = self.run_gillespie_iteration
+        elif algorithm == 'discrete':
+            raise(NotImplementedError, "Discrete algorithm not yet implemented.")
+        else:
+            raise(ValueError, f"{algorithm} algorithm not recognized")
 
     def initialize_population(self, initE, initI, initH, initC, initD):
         """
