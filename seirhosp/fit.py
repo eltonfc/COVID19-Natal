@@ -7,9 +7,10 @@ from scipy import optimize
 from . import model
 
 class SEIRHopsOptimizer():
-    def __init__(self, StoE, period=30):
+    def __init__(self, StoE, period=30, nruns=1):
         self.StoE = StoE
         self.period = period
+        self.nruns = nruns
 
     def prepare_model(self, **kwargs):
         self.ModelClass = functools.partial(model.SEIRHosp, **kwargs)
@@ -55,14 +56,19 @@ class SEIRHopsOptimizer():
             Sum of negative likelihoods.
         """
         StoE = StoE[0]
-        print(f"Preparing StoE={StoE}")
-        system = self.ModelClass(StoE=StoE)
-        print(f"Running StoE={StoE}...")
-        system.run(T=self.period, print_interval=1000)
         column = 3
 
-        model_results = self._discretize(system.tseries, column)
-        # TODO: take an average of n runs.
+        model_results = []
+
+        for run in range(self.nruns):
+            print(f"Preparing StoE={StoE}, run {run} of {self.nruns}")
+            system = self.ModelClass(StoE=StoE)
+            system.run(T=self.period, print_interval=1000)
+
+            model_results.append(self._discretize(system.tseries, column))
+            # TODO: take an average of n runs.
+
+        model_results = np.rint(np.average(model_results, axis=0))
         nloglike = -np.sum(poisson.logpmf(k=self.infectious, mu=model_results))
         print(StoE, -nloglike, model_results)
         return nloglike
