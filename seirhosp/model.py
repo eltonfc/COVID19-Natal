@@ -110,22 +110,22 @@ class SEIRHosp():
         # propensity calculations
         # TODO: implement as 2d array, the same as propensities.
         # TODO: Transition enum
-        self.StoE = np.full(shape=popsize, fill_value=StoE)
-        self.EtoI = np.full(shape=popsize, fill_value=EtoI)
-        self.ItoR = np.full(shape=popsize, fill_value=ItoR)
-        self.ItoH = np.full(shape=popsize,
+        self.StoE = np.full(shape=self.popsize, fill_value=StoE)
+        self.EtoI = np.full(shape=self.popsize, fill_value=EtoI)
+        self.ItoR = np.full(shape=self.popsize, fill_value=ItoR)
+        self.ItoH = np.full(shape=self.popsize,
                             fill_value=ItoH if ItoH is not None else 0)
-        self.ItoD = np.full(shape=popsize,
+        self.ItoD = np.full(shape=self.popsize,
                             fill_value=ItoD if ItoD is not None else 0)
-        self.HtoC = np.full(shape=popsize,
+        self.HtoC = np.full(shape=self.popsize,
                             fill_value=HtoC if HtoC is not None else 0)
-        self.HtoR = np.full(shape=popsize,
+        self.HtoR = np.full(shape=self.popsize,
                             fill_value=HtoR if HtoR is not None else 0)
-        self.HtoD = np.full(shape=popsize,
+        self.HtoD = np.full(shape=self.popsize,
                             fill_value=HtoD if HtoD is not None else 0)
-        self.CtoR = np.full(shape=popsize,
+        self.CtoR = np.full(shape=self.popsize,
                             fill_value=CtoR if CtoR is not None else 0)
-        self.CtoD = np.full(shape=popsize,
+        self.CtoD = np.full(shape=self.popsize,
                             fill_value=CtoD if CtoD is not None else 0)
 
         # Propensities are stored as an array with one line per transition with
@@ -355,7 +355,7 @@ class SEIRHosp():
 
         return True
 
-    def run(self, T, print_interval=1, verbose=False):
+    def run(self, T, print_interval=250, verbose=False):
         """Run or extend the simulation for T days."""
         self.t_max = T if self.t_max is None else self.t_max + T
         running = True
