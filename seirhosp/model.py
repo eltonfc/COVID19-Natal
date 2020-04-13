@@ -359,6 +359,8 @@ class SEIRHosp():
         """Run or extend the simulation for T days."""
         self.t_max = T if self.t_max is None else self.t_max + T
         running = True
+        if np.any(self.StoE > 1.0) or np.any(self.StoE < 0.0):
+            running = False
         while running and self.t < self.t_max:
             running = self.run_iteration()
             if (self.t_idx % print_interval == 0):
