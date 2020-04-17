@@ -25,12 +25,14 @@ Ciências e Tecnologia da Universidade Federal do Rio Grande do norte
 
 - Elton José Figueiredo de Carvalho - ECT-UFRN
 - Carlos Eduardo Pellicer de Oliveira - ECT-UFRN
+-  Isabelle Ribeiro Barbosa Mirabal - FACISA-UFRN
 - Efrain Pantaleón Matamoros - ECT-UFRN
 
 ## [CRediT](https://onlinelibrary.wiley.com/doi/full/10.1002/leap.1210)
 
 - **Elton Carvalho** Methodology, Software, Validation, Investigation
 - **Carlos Pellicer** Methodology, Software, Validation, Investigation
+- **Isabelle Mirabal** Conceptualization, Validation, Supervision
 - **Efrain Matamoros** Conceptualization, Supervision
 
 ## References
